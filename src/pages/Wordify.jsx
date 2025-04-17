@@ -1,155 +1,182 @@
-import { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+const Wordify = () => {
+  const [palabras, setPalabras] = useState([]);
+  const [index, setIndex] = useState(0);
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState(null);
+  const navigate = useNavigate();
 
-export default function Carousel() {
-  // Datos de ejemplo (puedes reemplazarlos con tus propios elementos)
-  const items = [
-    {
-      id: 1,
-      title: "Elemento 1",
-      description: "Este es el primer elemento del carrusel.",
-      content:
-        "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla facilisi. Sed euismod, nisl vitae aliquam lacinia.",
-    },
-    {
-      id: 2,
-      title: "Elemento 2",
-      description: "Este es el segundo elemento del carrusel.",
-      content:
-        "Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae; Donec lacinia mauris eget massa semper.",
-    },
-    {
-      id: 3,
-      title: "Elemento 3",
-      description: "Este es el tercer elemento del carrusel.",
-      content:
-        "Fusce scelerisque, nunc eget tincidunt elementum, quam ligula commodo elit, vel tempor justo nisi eget nunc.",
-    },
-    {
-      id: 4,
-      title: "Elemento 4",
-      description: "Este es el cuarto elemento del carrusel.",
-      content:
-        "Nullam vehicula magna eget condimentum ultrices. Morbi at justo ac nunc tempor facilisis at vel turpis.",
-    },
-  ];
+  useEffect(() => {
+    chrome.storage.local.get(["user_id"], (data) => {
+      const user_id = data.user_id;
 
-  // Estado para controlar el índice actual
-  const [currentIndex, setCurrentIndex] = useState(0);
+      if (!user_id) return;
 
-  // Funciones para navegar entre elementos
-  const goToPrevious = () => {
-    // Si estamos en el primer elemento, ir al último
-    const isFirstItem = currentIndex === 0;
-    const newIndex = isFirstItem ? items.length - 1 : currentIndex - 1;
-    setCurrentIndex(newIndex);
+      const fetchPalabras = async () => {
+        setCargando(true);
+        try {
+          const response = await fetch(
+            `http://localhost:8000/palabras/${user_id}`
+          );
+          if (!response.ok) throw new Error("Error al obtener las palabras");
+          let data = await response.json();
+
+          if (!data || data.length === 0) {
+            console.log("No hay palabras guardadas.");
+            setError("No hay palabras guardadas");
+            setCargando(false);
+            return;
+          }
+
+          data = data.map((p, i) => ({ ...p, numero: i + 1 }));
+          setPalabras(data);
+          setIndex(data.length - 1);
+        } catch (error) {
+          console.error("Error al cargar las palabras:", error);
+          setError("Error al cargar las palabras");
+        } finally {
+          setCargando(false);
+        }
+      };
+
+      fetchPalabras();
+    });
+  }, []);
+
+  const handlePrev = () => {
+    setIndex((prev) => (prev > 0 ? prev - 1 : prev));
   };
 
-  const goToNext = () => {
-    // Si estamos en el último elemento, volver al primero
-    const isLastItem = currentIndex === items.length - 1;
-    const newIndex = isLastItem ? 0 : currentIndex + 1;
-    setCurrentIndex(newIndex);
+  const handleNext = () => {
+    setIndex((prev) => (prev < palabras.length - 1 ? prev + 1 : prev));
   };
 
-  // Función para manejar cambios con teclado también (accesibilidad)
-  const handleKeyDown = (e) => {
-    if (e.key === "ArrowLeft") {
-      goToPrevious();
-    } else if (e.key === "ArrowRight") {
-      goToNext();
-    }
+  const palabraActual = palabras[index];
+  const totalPalabras = palabras.length;
+
+  if (cargando) {
+    return (
+      <div className="w-[300px] h-[300px] overflow-hidden flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Cargando palabras...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="w-[300px] h-[300px] overflow-hidden flex items-center justify-center  bg-red-50 rounded-lg">
+        <div className="text-center p-6">
+          <p className="text-red-500 font-medium mb-2">{error}</p>
+          <p className="text-gray-600">Intenta recargar la página</p>
+        </div>
+      </div>
+    );
+  }
+
+  const handleLogout = () => {
+    chrome.storage.local.get(["access_token", "user_id"], onStorageReceived);
+  };
+
+  const onStorageReceived = (data) => {
+    console.log("Antes de eliminar:", data);
+    chrome.storage.local.clear(onStorageCleared);
+  };
+
+  const onStorageCleared = () => {
+    console.log("Sesión cerrada. Datos eliminados.");
+    enviarMensajeLogout();
+    redirigirAlLogin();
+  };
+
+  const enviarMensajeLogout = () => {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs.length > 0) {
+        chrome.tabs.sendMessage(tabs[0].id, { action: "logout" });
+      }
+    });
+  };
+
+  const redirigirAlLogin = () => {
+    // Si estás usando React Router, usa navigate("/login")
+    navigate("/");
   };
 
   return (
-    <button
-      className="flex min-h-screen items-center justify-center bg-gray-900 px-4 py-12"
-      tabIndex={0}
-      onKeyDown={handleKeyDown}
-    >
-      <div className="w-full max-w-4xl mx-auto">
-        <div className="relative bg-gray-800 rounded-xl p-8 shadow-lg">
-          {/* Elemento actual */}
-          <div className="min-h-64 flex flex-col items-center justify-center py-8 px-4">
-            <div className="text-center mb-8">
-              <h3 className="text-indigo-400 text-3xl font-bold mb-2">
-                {items[currentIndex].title}
-              </h3>
-              <p className="text-gray-300 text-lg mb-4">
-                {items[currentIndex].description}
-              </p>
-              <div className="text-gray-400 text-base">
-                {items[currentIndex].content}
+    <div className="w-[400px] h-[250px] overflow-hidden rounded-xl shadow-lg p-6 max-w-md mx-auto">
+      <div className="flex items-center justify-between flex-row">
+        <h1 className="text-2xl font-bold text-center text-blue-600 ">
+          Wordify
+        </h1>
+        <button
+          className="bg-red-700 text-white rounded-4xl p-2 px-12"
+          onClick={handleLogout}
+        >
+          Cerrar sesión
+        </button>
+      </div>
+
+      {palabraActual ? (
+        <>
+          <div className="flex items-center justify-between ">
+            <button
+              onClick={handlePrev}
+              className={`w-12 h-12 rounded-full ${
+                index > 0
+                  ? "bg-blue-100 text-blue-600 hover:bg-blue-200"
+                  : "bg-gray-100 text-gray-400 cursor-not-allowed"
+              }`}
+              disabled={index === 0}
+            >
+              <span className="text-xl">←</span>
+            </button>
+
+            <div className="bg-gray-100 rounded-lg p-8     m-2">
+              <div className="text-center space-y-4">
+                <h2 className="text-3xl font-bold text-gray-800">
+                  {palabraActual.palabra_original}
+                </h2>
+                <p className="text-xl text-blue-600 font-medium">
+                  {palabraActual.palabra_traducida}
+                </p>
               </div>
             </div>
 
-            {/* Indicador de posición */}
-            <div className="flex items-center justify-center space-x-2 mt-8">
-              {items.map((_, index) => (
-                <button
-                  key={_}
-                  onClick={() => setCurrentIndex(index)}
-                  className={`h-2 w-2 rounded-full transition-colors duration-300 ${
-                    index === currentIndex ? "bg-indigo-500" : "bg-gray-600"
-                  }`}
-                  aria-label={`Ir al elemento ${index + 1}`}
-                />
-              ))}
+            <button
+              onClick={handleNext}
+              className={` flex items-center justify-center w-12 h-12 rounded-full ${
+                index < palabras.length - 1
+                  ? "bg-blue-100 text-blue-600 hover:bg-blue-200"
+                  : "bg-gray-100 text-gray-400 cursor-not-allowed"
+              }`}
+              disabled={index === palabras.length - 1}
+            >
+              <span className="text-xl">→</span>
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-xs font-medium text-gray-500">
+              {index + 1} de {totalPalabras}
+            </span>
+            <div className="w-32 bg-gray-200 rounded-full h-2">
+              <div
+                className="bg-blue-600 h-2 rounded-full"
+                style={{ width: `${((index + 1) / totalPalabras) * 100}%` }}
+              ></div>
             </div>
           </div>
-
-          {/* Botones de navegación */}
-          <div className="absolute inset-y-0 left-0 flex items-center">
-            <button
-              onClick={goToPrevious}
-              className="bg-gray-900 text-white p-2 rounded-full -ml-4 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-all duration-300"
-              aria-label="Anterior"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-6 w-6"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M15 19l-7-7 7-7"
-                />
-              </svg>
-            </button>
-          </div>
-
-          <div className="absolute inset-y-0 right-0 flex items-center">
-            <button
-              onClick={goToNext}
-              className="bg-gray-900 text-white p-2 rounded-full -mr-4 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-all duration-300"
-              aria-label="Siguiente"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-6 w-6"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 5l7 7-7 7"
-                />
-              </svg>
-            </button>
-          </div>
-
-          {/* Indicador de posición numérico */}
-          <div className="absolute bottom-4 right-4 bg-gray-900 text-gray-400 px-3 py-1 rounded-full text-sm font-medium">
-            {currentIndex + 1} / {items.length}
-          </div>
+        </>
+      ) : (
+        <div className="text-center py-12">
+          <p className="text-gray-600">No hay palabras disponibles</p>
         </div>
-      </div>
-    </button>
+      )}
+    </div>
   );
-}
+};
+
+export default Wordify;

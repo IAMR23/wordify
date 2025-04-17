@@ -1,5 +1,6 @@
+import axios from "axios";
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 export default function LoginForm() {
   const [formData, setFormData] = useState({
@@ -9,8 +10,8 @@ export default function LoginForm() {
 
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [loginSuccess, setLoginSuccess] = useState(false);
 
+  const navigate = useNavigate();
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
@@ -43,7 +44,7 @@ export default function LoginForm() {
     return newErrors;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const validationErrors = validate();
 
@@ -54,25 +55,63 @@ export default function LoginForm() {
 
     setIsSubmitting(true);
 
-    // Simulate API call
-    setTimeout(() => {
-      console.log("Login attempted:", formData);
-      setIsSubmitting(false);
-      setLoginSuccess(true);
+    try {
+      fetch(
+        "http://127.0.0.1:8000/login?username=" +
+          formData.username +
+          "&password=" +
+          formData.password,
+        {
+          method: "POST",
+          headers: { accept: "application/json" },
+        }
+      )
+        .then((response) => response.json())
+        .then((data) => {
+          if (data.access_token) {
+            // Guardar credenciales en chrome.storage.local
+            chrome.storage.local.set(
+              {
+                access_token: data.access_token,
+                user_id: data.user_id,
+              },
+              function () {
+                console.log("Usuario autenticado. Redirigiendo...");
 
-      // Reset form after successful login
-      setTimeout(() => {
-        setFormData({
-          username: "",
-          password: "",
+                // Enviar un mensaje a content.js para notificar que el usuario está autenticado
+                chrome.tabs.query(
+                  { active: true, currentWindow: true },
+                  function (tabs) {
+                    chrome.tabs.sendMessage(tabs[0].id, {
+                      action: "login",
+                      access_token: data.access_token,
+                      user_id: data.user_id,
+                    });
+                  }
+                );
+
+                navigate("/wordify");
+              }
+            );
+          } else {
+            alert("Error al iniciar sesión. Verifica tus credenciales.");
+          }
+        })
+        .catch((error) => {
+          console.error("Error al hacer el login:", error);
         });
-        setLoginSuccess(false);
-      }, 3000);
-    }, 1500);
+
+      navigate("/wordify");
+    } catch (error) {
+      console.error("Error al hacer el login:", error);
+      alert("Ocurrió un error al conectar con el servidor.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-900 px-4 py-12">
+    <div className="w-[400px] h-[600px] overflow-hidden flex min-h-screen items-center justify-center bg-gray-900 px-4 py-12">
       <div className="w-full max-w-md space-y-8">
         <div className="text-center">
           <h1 className="text-4xl font-bold text-indigo-400">Wordify</h1>
@@ -162,39 +201,12 @@ export default function LoginForm() {
             </button>
           </div>
 
-          {/* Success message */}
-          {loginSuccess && (
-            <div className="rounded-md bg-green-700 p-4">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  {/* Checkmark icon */}
-                  <svg
-                    className="h-5 w-5 text-green-300"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                </div>
-                <div className="ml-3">
-                  <p className="text-sm font-medium text-green-300">
-                    ¡Inicio de sesión exitoso!
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* Register link */}
           <div className="flex items-center justify-center">
             <p className="text-center text-sm text-gray-400">
               ¿No tienes una cuenta?{" "}
               <Link
-                href="#"
+                to="/register"
                 className="font-medium text-indigo-400 hover:text-indigo-300"
               >
                 Regístrate
